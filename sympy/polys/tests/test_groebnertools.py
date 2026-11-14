@@ -535,14 +535,26 @@ def test_is_reduced():
 
 def test_issue_30609():
     from sympy.core.symbol import symbols
+    from sympy.polys.groebnertools import is_groebner, is_reduced
     from sympy.polys.polytools import groebner
+    from sympy.polys.rings import sring
 
-    x, y, b, c = symbols('x y b c')
+    x, y, z, b, c = symbols('x y z b c')
 
-    f1 = (1 + x * y) * y + b
-    f2 = x**2 * y + c
+    F1 = (1 + x*y)**3 * z + y**2 * (1 + x*y) * (4 + 3*x*y)
+    F2 = y + 3*x*(1 + x*y)**2 * z + 3*x*y**2 * (4 + 3*x*y)
+    F3 = 2*x - 3*x**2*y - x**3*z
 
-    G = groebner([f1, f2], x, y, order='lex')
+    G_ring = groebner([F1, F2 - b, F3 - c], x, y, z, order='lex', field=False)
+    G_field = groebner([F1, F2 - b, F3 - c], x, y, z, order='lex', field=True)
 
-    assert len(G) > 0
-    assert all(g.has(b) or g.has(c) for g in G)
+    assert len(G_ring) == 3
+    assert len(G_field) == 3
+    assert list(G_ring) == list(groebner([F1, F2 - b, F3 - c], x, y, z, order='lex', method='f5b'))
+    assert G_field.reduce(F1)[1] == 0
+    assert G_field.reduce(F2 - b)[1] == 0
+    assert G_field.reduce(F3 - c)[1] == 0
+
+    ring, elems = sring(list(G_field), x, y, z, domain=G_field.domain, order='lex')
+    assert is_groebner(elems, ring)
+    assert is_reduced(elems, ring)

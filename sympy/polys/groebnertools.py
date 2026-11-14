@@ -4,23 +4,11 @@ from __future__ import annotations
 
 from sympy.core.symbol import Dummy
 from sympy.polys.monomials import monomial_mul, monomial_lcm, monomial_divides, term_div
-from sympy.polys.orderings import lex
+from sympy.polys.orderings import lex, grevlex
 from sympy.polys.polyerrors import DomainError
 from sympy.polys.polyconfig import query
+from sympy.polys.fglmtools import matrix_fglm
 
-def _simplify_coefficients(f, ring):
-    domain = ring.domain
-    if not domain.is_FractionField or not f:
-        return f
-
-    terms = {}
-    for monom, coeff in f.items():
-        if hasattr(coeff, 'cancel'):
-            terms[monom] = coeff.cancel()
-        else:
-            terms[monom] = coeff
-
-    return ring.from_dict(terms)
 
 def groebner(seq, ring, method=None):
     """
@@ -103,9 +91,6 @@ def _buchberger(f, ring):
     .. [4] [Cox97]_
 
     """
-    if ring.domain.is_FractionField:
-        f=[_simplify_coefficients(p,ring) for p in f]
-
     order = ring.order
 
     monomial_mul = ring.monomial_mul
@@ -125,8 +110,7 @@ def _buchberger(f, ring):
             return None
         else:
             h = h.monic()
-            if ring.domain.is_FractionField:
-                h = _simplify_coefficients(h, ring)
+
             if h not in I:
                 I[h] = len(f)
                 f.append(h)
@@ -208,6 +192,22 @@ def _buchberger(f, ring):
     if not f:
         return []
 
+    # grevlex code
+    if ring.domain.is_Field and ring.ngens > 1 and ring.order != grevlex:
+        grev_ring = ring.clone(order=grevlex)
+        f_grev = [g.set_ring(grev_ring) for g in f]
+        G_grev = _buchberger(f_grev, grev_ring)
+        if not G_grev:
+            return []
+        if len(G_grev) == 1 and G_grev[0].LM == grev_ring.zero_monom:
+            return [ring.one]
+        pure_powers = [False] * ring.ngens
+        for g in G_grev:
+            nonzero = [i for i, exp in enumerate(g.LM) if exp > 0]
+            if len(nonzero) == 1:
+                pure_powers[nonzero[0]] = True
+        if all(pure_powers):
+            return matrix_fglm(G_grev, grev_ring, ring.order)
     # replace f with a reduced list of initial polynomials; see [BW] page 203
     f1 = f[:]
 
@@ -616,8 +616,6 @@ def _f5b(F, ring):
     .. [2] Thomas Becker, Volker Weispfenning, Groebner bases: A computational
            approach to commutative algebra, 1993, p. 203, 216
     """
-    if ring.domain.is_FractionField:
-        F=[_simplify_coefficients(p,ring)for p in F]
     order = ring.order
 
     # reduce polynomials (like in Mario Pernici's implementation) (Becker, Weispfenning, p. 203)
@@ -662,9 +660,6 @@ def _f5b(F, ring):
         p = lbp(Sign(p), Polyn(p).monic(), k + 1)
 
         if Polyn(p):
-            if ring.domain.is_FractionField:
-                poly_p = _simplify_coefficients(Polyn(p), ring)
-                p = lbp(Sign(p), poly_p, k + 1)
             # remove old critical pairs, that become redundant when adding p:
             indices = []
             for i, cp in enumerate(CP):
