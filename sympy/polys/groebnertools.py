@@ -193,7 +193,7 @@ def _buchberger(f, ring):
         return []
 
     # grevlex code
-    if ring.domain.is_Field and ring.ngens > 1 and ring.order != grevlex:
+    if ring.domain.is_FractionField and ring.ngens > 1 and ring.order != grevlex:
         grev_ring = ring.clone(order=grevlex)
         f_grev = [g.set_ring(grev_ring) for g in f]
         G_grev = _buchberger(f_grev, grev_ring)
